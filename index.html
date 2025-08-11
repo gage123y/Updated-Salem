@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Lake Salem Derby VT - Fishing Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    .legend {
+      position: absolute; bottom: 30px; right: 10px;
+      background: rgba(255,255,255,0.9); padding: 8px 12px; border-radius: 6px;
+      font-size: 14px; line-height: 1.3; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    .legend .title {
+      font-weight: bold; margin-bottom: 6px;
+    }
+    .leaflet-control-layers-expanded {
+      max-height: 150px; overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div class="legend" id="legend">
+  <div class="title">Depth (ft)</div>
+  <div><svg width="20" height="12"><rect width="20" height="12" fill="#cde6f7"/></svg> 0-10</div>
+  <div><svg width="20" height="12"><rect width="20" height="12" fill="#82b7db"/></svg> 10-20</div>
+  <div><svg width="20" height="12"><rect width="20" height="12" fill="#3a7ecb"/></svg> 20-30</div>
+  <div><svg width="20" height="12"><rect width="20" height="12" fill="#235da4"/></svg> 30-50</div>
+  <div><svg width="20" height="12"><rect width="20" height="12" fill="#123865"/></svg> 50+</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+
+// Map center on Lake Salem
+const lakeCenter = [44.9298, -72.1032];
+const map = L.map('map').setView(lakeCenter, 13);
+
+// Base maps
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+
+const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Esri World Imagery',
+  maxZoom: 19
+});
+
+// Layer groups
+const shorelineLayer = L.layerGroup();
+const depthLayer = L.layerGroup();
+
+// Shoreline style
+const shorelineStyle = {
+  color: '#1e6c0a',
+  weight: 3,
+  fillOpacity: 0.1
+};
+
+// Embedded static GeoJSON for Lake Salem shoreline
+const lakeSalemShoreline = {
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "NAME": "Salem Pond" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-72.111,44.934],
+            [-72.104,44.935],
+            [-72.098,44.933],
+            [-72.093,44.928],
+            [-72.093,44.924],
+            [-72.099,44.918],
+            [-72.106,44.917],
+            [-72.112,44.921],
+            [-72.113,44.927],
+            [-72.111,44.934]
+          ]
+        ]
+      }
+    }
+  ]
+};
+
+// Embedded static GeoJSON for bathymetry depth points (example subset)
+const lakeSalemDepthPoints = {
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "depth_ft": 5, "LAKE_NAME": "Salem Pond" }, "geometry": { "type": "Point", "coordinates": [-72.108,44.930] }},
+    { "type": "Feature", "properties": { "depth_ft": 12, "LAKE_NAME": "Salem Pond" }, "geometry": { "type": "Point", "coordinates": [-72.105,44.929] }},
+    { "type": "Feature", "properties": { "depth_ft": 25, "LAKE_NAME": "Salem Pond" }, "geometry": { "type": "Point", "coordinates": [-72.101,44.927] }},
+    { "type": "Feature", "properties": { "depth_ft": 40, "LAKE_NAME": "Salem Pond" }, "geometry": { "type": "Point", "coordinates": [-72.099,44.922] }},
+    { "type": "Feature", "properties": { "depth_ft": 55, "LAKE_NAME": "Salem Pond" }, "geometry": { "type": "Point", "coordinates": [-72.107,44.920] }}
+  ]
+};
+
+// Add shoreline polygon
+L.geoJSON(lakeSalemShoreline, { style: shorelineStyle }).addTo(shorelineLayer);
+shorelineLayer.addTo(map);
+map.fitBounds(L.geoJSON(lakeSalemShoreline).getBounds());
+
+// Depth color scale (lighter blue = shallow, darker = deep)
+function getDepthColor(d) {
+  return d > 50 ? '#123865' :
+         d > 30 ? '#235da4' :
+         d > 20 ? '#3a7ecb' :
+         d > 10 ? '#82b7db' :
+                  '#cde6f7';
+}
+
+// Bathymetry point style
+function depthPointStyle(feature, latlng) {
+  const depth = feature.properties.depth_ft || 0;
+  return L.circleMarker(latlng, {
+    radius: 6,
+    fillColor: getDepthColor(depth),
+    color: '#222',
+    weight: 0.5,
+    opacity: 1,
+    fillOpacity: 0.8
+  });
+}
+
+// Popup for bathymetry points
+function onEachDepth(feature, layer) {
+  if(feature.properties) {
+    const p = feature.properties;
+    let content = `<b>${p.LAKE_NAME || 'Lake Salem'}</b><br/>Depth: ${p.depth_ft} ft`;
+    layer.bindPopup(content);
+  }
+}
+
+// Add depth points from embedded GeoJSON
+L.geoJSON(lakeSalemDepthPoints, {
+  pointToLayer: depthPointStyle,
+  onEachFeature: onEachDepth
+}).addTo(depthLayer);
+depthLayer.addTo(map);
+
+// Layer control
+L.control.layers({
+  'OpenStreetMap': osm,
+  'Esri World Imagery': esri
+}, {
+  'Shoreline': shorelineLayer,
+  'Depth Points': depthLayer
+}).addTo(map);
+
+</script>
+</body>
+</html>
