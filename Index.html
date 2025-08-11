@@ -1,0 +1,58 @@
+<script>
+// Define map and base layers (same as before)
+const lakeCenter = [44.9298, -72.1032];
+const map = L.map('map').setView(lakeCenter, 13);
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM contributors', maxZoom: 19 }).addTo(map);
+const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri World Imagery', maxZoom: 19 });
+
+// Common layers
+const shorelineLayer = L.layerGroup().addTo(map);
+const depthLayer = L.layerGroup().addTo(map);
+
+// Utility for depth coloring
+function getDepthColor(d) {
+  return d > 50 ? '#123865' :
+         d > 30 ? '#235da4' :
+         d > 20 ? '#3a7ecb' :
+         d > 10 ? '#82b7db' :
+                  '#cde6f7';
+}
+function depthPointStyle(feature, latlng) {
+  const depth = feature.properties.depth_ft || 0;
+  return L.circleMarker(latlng, {
+    radius: 6,
+    fillColor: getDepthColor(depth),
+    color: '#222',
+    weight: 0.5,
+    opacity: 1,
+    fillOpacity: 0.8
+  });
+}
+function onEachDepth(feature, layer) {
+  if (feature.properties?.depth_ft !== undefined) {
+    layer.bindPopup(`<b>${feature.properties.LAKE_NAME || 'Lake'}</b><br>Depth: ${feature.properties.depth_ft} ft`);
+  }
+}
+
+// Load shoreline GeoJSON
+fetch('shoreline.geojson')
+  .then(res => res.json())
+  .then(data => {
+    L.geoJSON(data, { style: { color: '#1e6c0a', weight: 3, fillOpacity: 0.1 } })
+      .addTo(shorelineLayer);
+    map.fitBounds(L.geoJSON(data).getBounds());
+  });
+
+// Load depth points GeoJSON
+fetch('depths.geojson')
+  .then(res => res.json())
+  .then(data => {
+    L.geoJSON(data, {
+      pointToLayer: depthPointStyle,
+      onEachFeature: onEachDepth
+    }).addTo(depthLayer);
+  });
+
+// Layer control setup
+L.control.layers({ 'OSM': osm, 'Satellite': esri }, { 'Shoreline': shorelineLayer, 'Depths': depthLayer }).addTo(map);
+</script>
